@@ -2,13 +2,8 @@
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
-from QR import load_img_data_and_resize_grey, load_img_data_and_resize_rgb, shuffle_training_data
-from QR import prepare_training_data_np, normalize_model, train_model
-from QR import save_model_training_data, load_normalized_model, load_trained_model, init_gpu
-from QR import save_trained_model, save_normalized_model, load_model_training_data
-from QR import layer_sizes, dense_layers, conv_layers, batch_size
-from QR import prepare_images_to_test, load_trained_model_only
-
+from QR import make_qr_code, decode_input, load_qr_images_from_path
+from QR import init_camera_settings, decode_input_camera
 from observer import Publisher, Subscriber
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import asyncio
@@ -20,192 +15,78 @@ class Model(Publisher):
     def __init__(self, events):
         super().__init__(events)
         # init gpu
-        self.gpu_session = init_gpu()
 
-        self.input_path = None
+        self.camera_setting = None
+
+        self.input_qr_img_path = None
         self.output_path = None
-        self.input_data = None
+        self.save_qr_data = None
 
-        self.training_data_grey = None
-        self.training_data_rgb = None
-        self.categories = [ 'Cat', 'Dog']
-
-        self.model_grey = None
-        self.model_rgb = None
+        self.generated_qr_data = None
+        self.loaded_qr_data = None
+        self.decoded_qr_data = None
 
         self.filepath = None
         self.processing = None
 
-        self.predict_data = None
-        self.loaded_model = None
-
-        self.pred_model_path = None
-
-    async def start_prediction_routine(self, name):
-        await self.restart_session()
-        self.predict_data = await prepare_images_to_test(self.filepath)
-        self.loaded_model = await load_trained_model_only(self.pred_model_path)
-        await self.predict_model()
-
-    async def predict_model(self):
-        # for image in self.predict_data:
-        #     prediction = self.model_rgb.predict([image])
-        #     print(prediction)  # will be a list in a list.
-        #     print(CATEGORIES[int(prediction[0][0])])
-        for pred in self.predict_data:
-            prediction = self.loaded_model.predict([pred[0]])
-            print('img: {} is: {}'.format(pred[1], self.categories[int(prediction[0][0])]))
-            print()
-        # for pred in prediction:
-        #     print(self.categories[pred])
-
-    async def restart_session(self):
-        self.gpu_session.close()
-        self.gpu_session = await init_gpu()
-        time.sleep(5)
 
     def clearData(self):
-        self.input_data = None
-        self.training_data_grey = None
-        self.training_data_rgb = None
-        self.categories = None
+        self.input_qr_img_path = None
+        self.output_path = None
+        self.loaded_qr_data = None
+        self.filepath = None
+        self.processing = None
 
-    def training_data_loaded(self):
-        if self.training_data_grey is None\
-                and self.training_data_rgb is None:
-            return False
-        else:
+    async def init_virtual_camera_obs(self):
+        settings = None
+        self.camera_setting = await init_camera_settings(settings)
+
+    async def load_qr_from_img(self, name):
+        await self.set_process(name)
+        await self.check_input_path()
+        await self.routine_load_qr_img()
+        await self.read_all_qr()
+        await self.delete_process()
+
+    async def load_qr_from_camera(self, name):
+        await self.set_process(name)
+        await self.check_camera_input()
+        await self.routine_load_qr_camera()
+        await self.delete_process()
+
+
+    async def generate_qr(self, type):
+        self.generated_qr_data = await make_qr_code(self.save_qr_data, type)
+        print()
+
+    async def check_input_path(self):
+        if self.input_qr_img_path is not None:
             return True
-
-    async def create_training_data(self):
-        if self.input_path is None:
-            messagebox.showerror( 'Error', 'no path!')
-            return
-        self.training_data_grey = None
-        await self.set_process("GREY_Model")
-        self.training_data_grey = await load_img_data_and_resize_grey(self.categories, self.input_path)
-        self.training_data_rgb = None
-        await self.set_process("RGB_Model")
-        self.training_data_rgb = await load_img_data_and_resize_rgb(self.categories, self.input_path)
-
-    async def shuffle_training_data(self):
-        if self.training_data_grey is None\
-                and self.training_data_rgb is None:
-            messagebox.showerror( 'Error', 'no path!')
-            return
-        self.training_data_grey = await shuffle_training_data(self.training_data_grey)
-        self.training_data_rgb = await shuffle_training_data(self.training_data_rgb)
-
-    async def prepare_training_data_np(self):
-        if self.training_data_grey is not None\
-                and self.training_data_rgb is not None:
-            self.training_data_grey, self.training_data_rgb = await prepare_training_data_np(self.training_data_grey, self.training_data_rgb)
         else:
-            messagebox.showerror('Error', 'no training data available')
+            print("no input")
+            return False
 
-    async def normalize_model(self):
-        layer_size = 32
-        dense_layer = 0
-        conv_layer = 3
-        await self.restart_session()
-        self.model_grey = await normalize_model(self.training_data_grey, layer_size, dense_layer, conv_layer)
-        await self.restart_session()
-        self.model_rgb = await normalize_model(self.training_data_rgb, layer_size, dense_layer, conv_layer)
+    async def check_camera_input(self):
+        await self.init_virtual_camera_obs()
 
-    async def train_model(self):
-        batch_s = 32
 
-        # NAME = 'grey'
-        # await self.restart_session()
-        # self.model_grey = await train_model(self.training_data_grey, self.model_grey, batch_s, NAME, 'grey')
-        NAME = 'rgb'
-        await self.restart_session()
-        time.sleep(5)
-        self.model_rgb = await train_model(self.training_data_rgb, self.model_rgb, batch_s, NAME, 'rgb')
+    async def read_all_qr(self):
+        read_data = []
+        for img in self.loaded_qr_data:
+            read_data.append(await self.routine_process_qr_loaded_data(img))
 
-    async def prepare_training_data(self, name):
-        await self.set_process(name)
-        await self.create_training_data()
-        await self.shuffle_training_data()
-        await self.prepare_training_data_np()
-        await self.delete_process()
+    async def routine_load_qr_img(self):
+        self.loaded_qr_data = await load_qr_images_from_path(self.input_qr_img_path)
 
-    async def normalize_model_routine(self, name):
-        await self.set_process(name)
-        await self.normalize_model()
-        await self.delete_process()
+    async def routine_load_qr_camera(self):
+        read_data = []
+        read_data.append(await decode_input_camera(self.camera_setting))
+        print(read_data)
 
-    async def train_model_routine(self, name):
-        await self.set_process(name)
-        await self.train_model()
-        await self.delete_process()
+    async def routine_process_qr_loaded_data(self, data):
+        return await decode_input(data)
 
-    async def save_model_training_data(self, name):
-        if self.training_data_grey is not None:
-            await self.set_process(name)
-            try:
-                await save_model_training_data(self.training_data_grey, "grey")
-            except AttributeError as e:
-                print(e)
-        if self.training_data_rgb is not None:
-            try:
-                await save_model_training_data(self.training_data_rgb, "rgb")
-            except AttributeError as e:
-                print(e)
-            await self.delete_process()
-        else:
-            messagebox.showerror('Error', 'no model_grey available')
 
-    async def save_normalized_model(self, name):
-        await self.set_process(name)
-        if self.model_grey is not None:
-            await save_normalized_model(self.model_grey, 'grey')
-        if self.model_rgb is not None:
-            await save_normalized_model(self.model_rgb, 'rgb')
-        else:
-            messagebox.showerror('Error', 'no model_grey available')
-        await self.delete_process()
-
-    async def save_trained_model(self, name):
-        if self.model_grey is not None:
-            await self.set_process(name)
-            await save_trained_model(self.model_grey, 'grey')
-        if self.model_rgb is not None:
-            await save_trained_model(self.model_rgb, 'rgb')
-            await self.delete_process()
-        else:
-            messagebox.showerror('Error', 'no model_rgb available')
-
-    async def load_model_training_data(self, name):
-        self.training_data_grey = None
-        await self.set_process(name + "_grey")
-        self.training_data_grey = await load_model_training_data("grey")
-        await self.delete_process()
-        self.training_data_rgb = None
-        await self.set_process(name + "_rgb")
-        self.training_data_rgb = await load_model_training_data("rgb")
-        await self.delete_process()
-
-    async def load_normalized_model(self, name):
-        self.model_grey, self.training_data_grey = None, None
-        await self.set_process(name + "_grey")
-        self.model_grey, self.training_data_grey = await load_normalized_model("grey")
-        await self.delete_process()
-
-        self.model_rgb, self.training_data_rgb = None, None
-        await self.set_process(name + "_rgb")
-        self.model_rgb, self.training_data_rgb = await load_normalized_model("rgb")
-        await self.delete_process()
-
-    async def load_trained_model(self, name):
-        self.model_grey = None
-        await self.set_process(name + "_grey")
-        self.model_grey, self.training_data_grey = await load_trained_model("grey")
-        await self.delete_process()
-        self.model_rgb = None
-        await self.set_process(name + "_rgb")
-        self.model_rgb, self.training_data_rgb = await load_trained_model("rgb")
-        await self.delete_process()
 
     async def set_process(self, task):
         self.dispatch("data_changed", "{} started".format(task))
@@ -215,31 +96,6 @@ class Model(Publisher):
         self.dispatch("data_changed", "{} finished".format(self.processing))
         self.processing = None
 
-    async def multiple_model_testing(self, name):
-        # await self.set_process(name + "_grey")
-        # for dense_layer in dense_layers:
-        #     for layer_size in layer_sizes:
-        #         for conv_layer in conv_layers:
-        #             for batches in batch_size:
-        #                 NAME = "{}-conv-{}-nodes-{}-dense-{}-batch-{}_Grey".format(conv_layer, layer_size, dense_layer, batches, int(time.time()))
-        #                 print(NAME)
-        #                 await self.restart_session()
-        #                 self.model_grey = await normalize_model(self.training_data_grey, layer_size, dense_layer, conv_layer)
-        #                 await self.restart_session()
-        #                 self.model_grey = await train_model(self.training_data_grey, self.model_grey, batches, NAME, 'grey')
-
-        await self.set_process(name + "_rgb")
-        for dense_layer in dense_layers:
-            for layer_size in layer_sizes:
-                for conv_layer in conv_layers:
-                    for batches in batch_size:
-                        NAME = "{}-conv-{}-nodes-{}-dense-{}-batch-{}_RGB".format(conv_layer, layer_size, dense_layer, batches, int(time.time()))
-                        print(NAME)
-                        await self.restart_session()
-                        self.model_rgb = await normalize_model(self.training_data_rgb, layer_size, dense_layer, conv_layer)
-                        await self.restart_session()
-                        self.model_rgb = await train_model(self.training_data_rgb, self.model_rgb, batches, NAME, 'rgb')
-        await self.delete_process()
 
 class Controller(Subscriber):
     def __init__(self, name):
@@ -254,38 +110,16 @@ class Controller(Subscriber):
         #counts running threads
         self.runningAsync = 0
 
-        #init model_grey and viewer
-        #init model_grey and viewer with publisher
+        #init model and viewer
+        #init model and viewer with publisher
         self.model = Model(['data_changed', 'clear_data'])
-        self.view = View(self.root, self.model, ['prepare_training_data',
-                                                 'save_model_training_data',
-                                                 'save_normalized_model',
-                                                 'save_trained_model',
-                                                 'train_model_routine',
-                                                 'normalize_model_routine',
-                                                 'load_model_training_data',
-                                                 'load_normalized_model',
-                                                 'load_trained_model',
-                                                 'multiple_model_testing',
-                                                 'start_prediction_routine',
-                                                 'close_button'], 'viewer')
+        self.view = View(self.root, self.model, ['load_qr_from_img',
+                                                 'load_qr_from_camera'],
+                                                 'viewer')
 
         #init Observer
-        self.view.register('prepare_training_data', self)  # Achtung, sich selbst angeben und nicht self.controller
-        self.view.register('normalize_model_routine', self)
-        self.view.register('train_model_routine', self)
-
-        self.view.register('save_model_training_data', self)  # Achtung, sich selbst angeben und nicht self.controller
-        self.view.register('save_normalized_model', self)  # Achtung, sich selbst angeben und nicht self.controller
-        self.view.register('save_trained_model', self)  # Achtung, sich selbst angeben und nicht self.controller
-
-        self.view.register('load_model_training_data', self)
-        self.view.register('load_normalized_model', self)
-        self.view.register('load_trained_model', self)
-
-        self.view.register('multiple_model_testing', self)
-        self.view.register('start_prediction_routine', self)
-        self.view.register('close_button', self)
+        self.view.register('load_qr_from_img', self)  # Achtung, sich selbst angeben und nicht self.controller
+        self.view.register('load_qr_from_camera', self)
 
         #init Observer
         self.model.register('data_changed', self.view) # Achtung, sich selbst angeben und nicht self.controller
@@ -293,25 +127,14 @@ class Controller(Subscriber):
 
     def update(self, event, message):
         self.view.write_gui_log("{} button clicked...".format(event))
-        if event == 'prepare_training_data':
+        if event == 'load_qr_from_img':
             try:
-                self.model.input_path = self.view.main.input_path.get()
+                self.model.input_qr_img_path = self.view.main.input_path.get()
             except FileNotFoundError:
                 messagebox.showerror('Error', 'no input path')
                 return
             try:
                 self.model.output_path = self.view.main.output_path.get()
-            except FileNotFoundError:
-                messagebox.showerror('Error', 'no output path')
-                return
-        elif event == 'start_prediction_routine':
-            try:
-                self.model.filepath = self.view.main.input_image_dir_path.get()
-            except FileNotFoundError:
-                messagebox.showerror('Error', 'no input path')
-                return
-            try:
-                self.model.pred_model_path = self.view.main.input_model_path.get()
             except FileNotFoundError:
                 messagebox.showerror('Error', 'no output path')
                 return
@@ -324,7 +147,8 @@ class Controller(Subscriber):
         self.view.write_gui_log("{} routine finished".format(event))
 
     def run(self):
-        self.root.title("show plot")
+        self.root.title("QR Code Simple GUI")
+
         #sets the window in focus
         self.root.deiconify()
         self.root.mainloop()
@@ -358,7 +182,7 @@ class Controller(Subscriber):
         return await visit_task(task)
 
     async def generic_task(self, name):
-        raise Exception('No model_grey.{} method'.format(name))
+        raise Exception('No {} method'.format(name))
 
 
 class View(Publisher, Subscriber):
@@ -372,24 +196,13 @@ class View(Publisher, Subscriber):
         self.frame = tk.Frame(parent)
         self.frame.grid(sticky="NSEW")
         self.main = Main(parent)
+        self.canvas = None
 
         # hidden and shown widgets
         self.hiddenwidgets = {}
 
-        self.main.create_training_data_button.bind("<Button>", self.prepare_training_data)
-        self.main.normalize_model_button.bind("<Button>", self.normalize_model)
-        self.main.train_model_button.bind("<Button>", self.train_model_routine)
-        self.main.multiple_model_testing_button.bind("<Button>", self.multiple_model_testing)
-        self.main.start_prediction_button.bind("<Button>", self.start_prediction_routine)
-
-        self.main.save_training_data_button.bind("<Button>", self.save_model_training_data)
-        self.main.save_normalized_model_button.bind("<Button>", self.save_normalized_model)
-        self.main.save_trained_model_button.bind("<Button>", self.save_trained_model)
-
-
-        self.main.load_training_data_button.bind("<Button>", self.load_model_training_data)
-        self.main.load_normalized_model_button.bind("<Button>", self.load_normalized_model)
-        self.main.load_trained_model_button.bind("<Button>", self.load_trained_model)
+        self.main.load_qr_from_img.bind("<Button>", self.load_qr_from_img)
+        self.main.load_qr_from_camera.bind("<Button>", self.load_qr_from_camera)
 
         self.main.quitButton.bind("<Button>", self.closeprogram)
 
@@ -416,38 +229,11 @@ class View(Publisher, Subscriber):
     # 'create_model',
     # 'save_model',
     # 'close_button'
-    def prepare_training_data(self, event):
-        self.dispatch("prepare_training_data", "prepare_training_data clicked! Notify subscriber!")
+    def load_qr_from_img(self, event):
+        self.dispatch("load_qr_from_img", "load_qr_from_img clicked! Notify subscriber!")
 
-    def train_model_routine(self, event):
-        self.dispatch("train_model_routine", "train_model_routines clicked! Notify subscriber!")
-
-    def normalize_model(self, event):
-        self.dispatch("normalize_model_routine", "normalize_model clicked! Notify subscriber!")
-
-    def multiple_model_testing(self, event):
-        self.dispatch("multiple_model_testing", "multiple_model_testing clicked! Notify subscriber!")
-
-    def start_prediction_routine(self, event):
-        self.dispatch("start_prediction_routine", "start_prediction_routine clicked! Notify subscriber!")
-
-    def save_model_training_data(self, event):
-        self.dispatch("save_model_training_data", "save_model clicked! Notify subscriber!")
-
-    def save_normalized_model(self, event):
-        self.dispatch("save_normalized_model", "save_normalized_model clicked! Notify subscriber!")
-
-    def save_trained_model(self, event):
-        self.dispatch("save_trained_model", "save_trained_model clicked! Notify subscriber!")
-
-    def load_model_training_data(self, event):
-        self.dispatch("load_model_training_data", "load_model_training_data clicked! Notify subscriber!")
-
-    def load_normalized_model(self, event):
-        self.dispatch("load_normalized_model", "load_normalized_model clicked! Notify subscriber!")
-
-    def load_trained_model(self, event):
-        self.dispatch("load_trained_model", "load_trained_model clicked! Notify subscriber!")
+    def load_qr_from_camera(self, event):
+        self.dispatch("load_qr_from_camera", "load_qr_from_camera clicked! Notify subscriber!")
 
     def closeprogram(self, event):
         self.dispatch("close_button", "quit button clicked! Notify subscriber!")
@@ -477,91 +263,35 @@ class Main(tk.Frame):
         self.mainFrame = tk.Frame(root)
         self.mainFrame.grid(sticky="NSEW")
 
-        #textfield
+        #text input
         self.input = tk.Label(self.mainFrame, text="Enter input path ")
         self.input.grid(row = 0, column = 0, sticky = tk.N, pady = 2, columnspan = 4)
 
-        #entry
+        #entry input
         self.input_path = tk.Entry(self.mainFrame, width=80)
-        self.input_path.insert(0, 'Data/')
+        self.input_path.insert(0, 'Input_QR/')
         self.input_path.grid(row = 1, column = 0, sticky = tk.N, pady = 2, columnspan = 4)
 
-        #textfield
+        #text output
         self.output = tk.Label(self.mainFrame, text="Enter outputpath")
         self.output.grid(row = 2, column = 0, sticky = tk.N, pady = 2, columnspan = 4)
 
-        #entry
+        #entry output
         self.output_path = tk.Entry(self.mainFrame, width=80)
-        self.output_path.insert(0,'E:/OneDrive/1_Daten_Dokumente_Backup/1_Laptop_Backup_PC/Programmieren_Python/algorithmn/Algorithmen/ML/ML_Tests')
+        self.output_path.insert(0,'Output')
         self.output_path.grid(row = 3, column = 0, sticky = tk.N, pady = 2, columnspan = 4)
 
-        #button create_training_data
-        self.create_training_data_button = tk.Button(self.mainFrame, text="Create Training Data", width=30, borderwidth=5, bg='#FBD975')
-        self.create_training_data_button.grid(row = 7, column = 1, sticky = tk.N, pady = 0)
+        #button load_qr_from_img
+        self.load_qr_from_img = tk.Button(self.mainFrame, text="Load QR from IMG", width=30, borderwidth=5, bg='#FBD975')
+        self.load_qr_from_img.grid(row = 7, column = 1, sticky = tk.N, pady = 0)
 
-        #button save model_grey
-        self.save_training_data_button = tk.Button(self.mainFrame, text="Save Training Data", width=30, borderwidth=5, bg='#FBD975')
-        self.save_training_data_button.grid(row = 7, column = 2, sticky = tk.N, pady = 0)
-
-        #button load model_grey
-        self.load_training_data_button = tk.Button(self.mainFrame, text="Load Training Data", width=30, borderwidth=5, bg='#FBD975')
-        self.load_training_data_button.grid(row = 8, column = 2, sticky = tk.N, pady = 0)
-
-        #button normalize model_grey
-        self.normalize_model_button = tk.Button(self.mainFrame, text="Normalize Model", width=30, borderwidth=5, bg='#FBD975')
-        self.normalize_model_button.grid(row = 9, column = 1, sticky = tk.N, pady = 0)
-
-        #button  multiple_model_testing_button
-        self.multiple_model_testing_button = tk.Button(self.mainFrame, text="multiple_model_testing", width=30, borderwidth=5, bg='#FBD975')
-        self.multiple_model_testing_button.grid(row = 13, column = 1, sticky = tk.N, pady = 0)
-
-        #button save norm model_grey
-        self.save_normalized_model_button = tk.Button(self.mainFrame, text="Save Normalize Model", width=30, borderwidth=5, bg='#FBD975')
-        self.save_normalized_model_button.grid(row = 9, column = 2, sticky = tk.N, pady = 0)
-
-        #button save norm model_grey
-        self.load_normalized_model_button = tk.Button(self.mainFrame, text="Load Normalize Model", width=30, borderwidth=5, bg='#FBD975')
-        self.load_normalized_model_button.grid(row = 10, column = 2, sticky = tk.N, pady = 0)
-
-        #button train model_grey
-        self.train_model_button = tk.Button(self.mainFrame, text="Train Model", width=30, borderwidth=5, bg='#FBD975')
-        self.train_model_button.grid(row = 11, column = 1, sticky = tk.N, pady = 0)
-
-        #button save trained model_grey
-        self.save_trained_model_button = tk.Button(self.mainFrame, text="Save Trained Model", width=30, borderwidth=5, bg='#FBD975')
-        self.save_trained_model_button.grid(row = 11, column = 2, sticky = tk.N, pady = 0)
-
-        #button save trained model_grey
-        self.load_trained_model_button = tk.Button(self.mainFrame, text="Load Trained Model", width=30, borderwidth=5, bg='#FBD975')
-        self.load_trained_model_button.grid(row = 12, column = 2, sticky = tk.N, pady = 0)
+        #button load_qr_from_camera
+        self.load_qr_from_camera = tk.Button(self.mainFrame, text="Load QR from Camera", width=30, borderwidth=5, bg='#FBD975')
+        self.load_qr_from_camera.grid(row = 7, column = 2, sticky = tk.N, pady = 0)
 
         #button quit
         self.quitButton = tk.Button(self.mainFrame, text="Quit", width=30, borderwidth=5, bg='#FBD975')
         self.quitButton.grid(row = 15, column = 2, sticky = tk.N, pady = 0)
-
-        #### test model ####
-
-        #textfield
-        self.input_model = tk.Label(self.mainFrame, text="Enter input path to model ")
-        self.input_model.grid(row = 16, column = 0, sticky = tk.N, pady = 2, columnspan = 4)
-
-        #entry
-        self.input_model_path = tk.Entry(self.mainFrame, width=80)
-        self.input_model_path.insert(0, 'rgb_trained_model_d.h5')
-        self.input_model_path.grid(row = 17, column = 0, sticky = tk.N, pady = 2, columnspan = 4)
-
-        #textfield
-        self.input_image_dir = tk.Label(self.mainFrame, text="Enter input path ")
-        self.input_image_dir.grid(row = 18, column = 0, sticky = tk.N, pady = 2, columnspan = 4)
-
-        #entry
-        self.input_image_dir_path = tk.Entry(self.mainFrame, width=80)
-        self.input_image_dir_path.insert(0, 'predict/')
-        self.input_image_dir_path.grid(row = 19, column = 0, sticky = tk.N, pady = 2, columnspan = 4)
-
-        #button save norm model_grey
-        self.start_prediction_button = tk.Button(self.mainFrame, text="start_prediction_button", width=30, borderwidth=5, bg='#FBD975')
-        self.start_prediction_button.grid(row = 20, column = 1, sticky = tk.N, pady = 0)
 
 
 class InfoBottomPanel(tk.Frame):
