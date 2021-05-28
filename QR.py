@@ -49,6 +49,7 @@ async def decode_input(img):
 async def decode_input_camera(camera_settings):
     camera = True
     img_data = []
+
     while camera == True:
         success, frame = camera_settings.read()
         for code in decode(frame):
@@ -58,4 +59,5 @@ async def decode_input_camera(camera_settings):
         cv2.imshow('Testing-QR', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+
 
