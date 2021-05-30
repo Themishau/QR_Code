@@ -241,6 +241,7 @@ class View(Publisher, Subscriber):
     def closeprogrammenu(self):
         self.dispatch("close_button", "quit button clicked! Notify subscriber!")
 
+
     def update(self, event, message):
         if event == "data_changed":
             self.write_gui_log("{}".format(message))
