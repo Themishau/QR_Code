@@ -2,16 +2,14 @@
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
-from QR_rasp_noasyn import make_qr_code, decode_input, load_qr_images_from_path
-from QR_rasp_noasyn import init_camera_settings, decode_input_camera
+from QR_rasp_asyn import make_qr_code, decode_input, load_qr_images_from_path
+from QR_rasp_asyn import init_camera_settings, decode_input_camera
 from observer import Publisher, Subscriber
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import asyncio
-# import nest_asyncio
 import threading
 import time
 
-# nest_asyncio.apply()
 
 class Model(Publisher):
     def __init__(self, events):
@@ -39,64 +37,62 @@ class Model(Publisher):
         self.filepath = None
         self.processing = None
 
-    def init_virtual_camera_obs(self):
+    async def init_virtual_camera_obs(self):
         settings = None
-        self.camera_setting = init_camera_settings(settings)
+        self.camera_setting = await init_camera_settings(settings)
 
-    def load_qr_from_img(self, name):
-        self.set_process(name)
-        self.check_input_path()
-        self.routine_load_qr_img()
-        self.read_all_qr()
-        self.delete_process()
+    async def load_qr_from_img(self, name):
+        await self.set_process(name)
+        await self.check_input_path()
+        await self.routine_load_qr_img()
+        await self.read_all_qr()
+        await self.delete_process()
 
-    def load_qr_from_camera(self, name):
-        self.set_process(name)
-        # await self.check_camera_input()
-        self.routine_load_qr_camera()
-        self.delete_process()
+    async def load_qr_from_camera(self, name):
+        await self.set_process(name)
+        await self.check_camera_input()
+        await self.routine_load_qr_camera()
+        await self.delete_process()
 
 
-    def generate_qr(self, type):
-        self.generated_qr_data = make_qr_code(self.save_qr_data, type)
+    async def generate_qr(self, type):
+        self.generated_qr_data = await make_qr_code(self.save_qr_data, type)
         print()
 
-    def check_input_path(self):
+    async def check_input_path(self):
         if self.input_qr_img_path is not None:
             return True
         else:
             print("no input")
             return False
 
-    def check_camera_input(self):
-        self.init_virtual_camera_obs()
-        
-    def read_all_qr(self):
+    async def check_camera_input(self):
+        await self.init_virtual_camera_obs()
+
+
+    async def read_all_qr(self):
         read_data = []
         for img in self.loaded_qr_data:
-#        print(self.loaded_qr_data)
-#        print(read_data)
-            read_data.append(self.routine_process_qr_loaded_data(img))
+            read_data.append(await self.routine_process_qr_loaded_data(img))
 
-    def routine_load_qr_img(self):
-        self.loaded_qr_data = load_qr_images_from_path(self.input_qr_img_path)
+    async def routine_load_qr_img(self):
+        self.loaded_qr_data = await load_qr_images_from_path(self.input_qr_img_path)
 
-    def routine_load_qr_camera(self):
+    async def routine_load_qr_camera(self):
         read_data = []
-        #read_data.append(threading.Thread(target=decode_input_camera(self.camera_setting), args=()).start())
-        read_data.append(decode_input_camera(self.camera_setting))
+        read_data.append(await decode_input_camera(self.camera_setting))
         print(read_data)
 
-    def routine_process_qr_loaded_data(self, data):
-        return decode_input(data)
+    async def routine_process_qr_loaded_data(self, data):
+        return await decode_input(data)
 
 
 
-    def set_process(self, task):
+    async def set_process(self, task):
         self.dispatch("data_changed", "{} started".format(task))
         self.processing = task
 
-    def delete_process(self):
+    async def delete_process(self):
         self.dispatch("data_changed", "{} finished".format(self.processing))
         self.processing = None
 
@@ -109,8 +105,8 @@ class Controller(Subscriber):
         self.root = tk.Tk()
 
         #init window size
-        self.root.geometry("800x640+200+200")
-        self.root.resizable(1, 1)
+        self.root.geometry("485x750+200+200")
+        self.root.resizable(0, 0)
         #counts running threads
         self.runningAsync = 0
 
@@ -126,6 +122,7 @@ class Controller(Subscriber):
         self.view.register('load_qr_from_img', self)  # Achtung, sich selbst angeben und nicht self.controller
         self.view.register('load_qr_from_camera', self)
         self.view.register('close_button', self)
+
         #init Observer
         self.model.register('data_changed', self.view) # Achtung, sich selbst angeben und nicht self.controller
         self.model.register('clear_data', self.view)
@@ -145,7 +142,7 @@ class Controller(Subscriber):
                 return
 
         if event == 'close_button':
-            return self.closeprogram(event)
+            self.closeprogram(event)
 
         self.do_tasks(event)
 
@@ -166,26 +163,26 @@ class Controller(Subscriber):
 
     def do_tasks(self, task):
         """ Function/Button starting the asyncio part. """
+#        return threading.Thread(target=self.async_do_task(task), args=()).start()
         return self.async_do_task(task)
 
     def async_do_task(self, task):
-        # loop = asyncio.new_event_loop()
-        # self.runningAsync = self.runningAsync + 1
+        loop = asyncio.new_event_loop()
+        self.runningAsync = self.runningAsync + 1
         visit_task = getattr(self.model, task, self.generic_task)
-        return visit_task(task)
-        # loop.run_until_complete(visit_task(task))
-        # while self.model.processing is not None:
-        #    time.sleep(1)
-        #    print('status: {} please wait...'.format(self.model.processing))
-        #loop.close()
-        #self.runningAsync = self.runningAsync - 1
+        loop.run_until_complete(visit_task(task))
+        while self.model.processing is not None:
+            time.sleep(1)
+            print('status: {} please wait...'.format(self.model.processing))
+        loop.close()
+        self.runningAsync = self.runningAsync - 1
 
-    #async def task(self, task):
+    async def task(self, task):
         # create an generic method call
         # self.model_grey -> model_grey
         # self       -> controller
-    #   visit_task = getattr(self.model, task, self.generic_task)
-    #    return await visit_task(task)
+        visit_task = getattr(self.model, task, self.generic_task)
+        return await visit_task(task)
 
     async def generic_task(self, name):
         raise Exception('No {} method'.format(name))

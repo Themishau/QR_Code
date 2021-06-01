@@ -11,8 +11,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+import threading
 from IPython import get_ipython
 from IPython.display import display
+import imutils
 # CAMERA_PORT = 0
 
 def init_camera_settings(settings):
@@ -47,29 +49,30 @@ def decode_input(img):
 
 def decode_input_camera(cam):
     img_data = []
-
-    # with PiCamera() as camera:
-    camera = PiCamera()
-    camera.resolution = (1024, 768)
-    camera.framerate = 60
-    rawCapture = PiRGBArray(camera, size=(1024, 768))
     
+    with PiCamera() as camera:
+       # camera = PiCamera()
+        camera.resolution = (1024, 768)
+        camera.framerate = 5
+        rawCapture = PiRGBArray(camera, size=(1024, 768))
+        time.sleep(2)
+        stream = camera.capture_continuous(rawCapture, format="bgr", use_video_port=True)
 
-    for frame in camera.capture_continuous(rawCapture, format="bgr"):
-        image = frame.array
-        cv2.imshow('Testing-QR', image)
-        
-        for code in decode(image):
-            img_data.append([code.data.decode('utf-8'), code.type])
-            cv2.destroyAllWindows()
-            camera.close()
-            return img_data
-        
-        rawCapture.truncate(0)
-        
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            camera.close()
-            break
+        for frame in stream:  
+            image = frame.array
+            cv2.imshow('Testing-QR', image)
+            
+            for code in decode(image):
+                img_data.append([code.data.decode('utf-8'), code.type])
+                cv2.destroyAllWindows()
+                camera.close()
+                return img_data
+            
+            rawCapture.truncate(0)
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                camera.close()
+                break
             
 
 
