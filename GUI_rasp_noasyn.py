@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
 from QR_rasp_noasyn import make_qr_code, decode_input, load_qr_images_from_path
-from QR_rasp_noasyn import init_camera_settings, decode_input_camera
+from QR_rasp_noasyn import init_camera_settings, decode_input_camera, destroy_all_cv
 from observer import Publisher, Subscriber
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import asyncio
@@ -159,9 +159,11 @@ class Controller(Subscriber):
         self.root.mainloop()
 
     def closeprogram(self, event):
+        destroy_all_cv()
         self.root.destroy()
 
     def closeprogrammenu(self):
+        destroy_all_cv()
         self.root.destroy()
 
     def do_tasks(self, task):

@@ -52,27 +52,30 @@ def decode_input_camera(cam):
     
     with PiCamera() as camera:
        # camera = PiCamera()
-        camera.resolution = (1024, 768)
-        camera.framerate = 5
-        rawCapture = PiRGBArray(camera, size=(1024, 768))
-        time.sleep(2)
-        stream = camera.capture_continuous(rawCapture, format="bgr", use_video_port=True)
+        camera.resolution = (640, 480)
+        camera.framerate = 32
+        rawCapture = PiRGBArray(camera, size=(640, 480))
+        time.sleep(10)
 
-        for frame in stream:  
+        for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):  
             image = frame.array
             cv2.imshow('Testing-QR', image)
+            key = cv2.waitKey(2) & 0xFF
             
             for code in decode(image):
                 img_data.append([code.data.decode('utf-8'), code.type])
-                cv2.destroyAllWindows()
                 camera.close()
+                cv2.destroyAllWindows()
                 return img_data
             
             rawCapture.truncate(0)
             
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                camera.close()
+            if key == ord('q'):
+                cv2.destroyAllWindows()
                 break
+
+def destroy_all_cv():
+    cv2.destroyAllWindows()
             
 
 
