@@ -52,27 +52,41 @@ def decode_input_camera(cam):
     
     with PiCamera() as camera:
        # camera = PiCamera()
-        camera.resolution = (640, 480)
-        camera.framerate = 32
-        rawCapture = PiRGBArray(camera, size=(640, 480))
-        time.sleep(10)
-
-        for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):  
-            image = frame.array
-            cv2.imshow('Testing-QR', image)
-            key = cv2.waitKey(2) & 0xFF
+        if not camera._check_camera_open():
+            camera.resolution = (640, 480)
+            camera.framerate = 25
+            rawCapture = PiRGBArray(camera, size=(640, 480))
+            time.sleep(10)
+        print('scan start')
+        try:
+            for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):  
+                image = frame.array
+                cv2.imshow('Testing-QR', image)
+                
+                key = cv2.waitKey(2) & 0xFF
+                rawCapture.truncate()
+                rawCapture.seek(0)
+                
+                for code in decode(image):
+                    img_data.append([code.data.decode('utf-8'), code.type])
+                    #camera.close()
+                    cv2.destroyAllWindows()
+                    return img_data, camera
             
-            for code in decode(image):
-                img_data.append([code.data.decode('utf-8'), code.type])
-                camera.close()
-                cv2.destroyAllWindows()
-                return img_data
-            
-            rawCapture.truncate(0)
-            
-            if key == ord('q'):
-                cv2.destroyAllWindows()
-                break
+                if key == ord('q'):
+                    #camera.close()
+                    cv2.destroyAllWindows()
+                    return img_data, camera
+        
+        # Kamera nicht schlißen, sonst wird ein Fehler hochgeworfen.
+        # Erst nach return oder sonst was wie hier hochwerfen. 
+        except KeyError as e:
+            camera.close()
+            cv2.destroyAllWindows() 
+        finally:
+            camera.close()
+            cv2.destroyAllWindows()
+    
 
 def destroy_all_cv():
     cv2.destroyAllWindows()

@@ -84,7 +84,9 @@ class Model(Publisher):
     def routine_load_qr_camera(self):
         read_data = []
         #read_data.append(threading.Thread(target=decode_input_camera(self.camera_setting), args=()).start())
-        read_data.append(decode_input_camera(self.camera_setting))
+        data, camera = decode_input_camera(self.camera_setting)
+        camera.close()
+        read_data.append(data)
         print(read_data)
 
     def routine_process_qr_loaded_data(self, data):
