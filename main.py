@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-from GUI import *
-import qrcode
-import os
-import cv2
-from pyzbar.pyzbar import decode
-print("start")
-menu = Controller('controller')
-menu.run()
+from GUI_rasp_noasyn import *
+#from GUI_rasp__webcam_noasyn import *
+
+if __name__ == '__main__':
+    print("start")
+    menu = Controller('controller')
+    menu.run()

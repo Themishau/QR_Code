@@ -2,10 +2,8 @@
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
-from QR_rasp_noasyn import make_qr_code, decode_input, load_qr_images_from_path
-from QR_rasp_noasyn import init_camera_settings, decode_input_camera, destroy_all_cv
-#from QR_webcam_noasyn import make_qr_code, decode_input, load_qr_images_from_path
-#from QR_webcam_noasyn import init_camera_settings, decode_input_camera
+from QR_webcam_noasyn import make_qr_code, decode_input, load_qr_images_from_path
+from QR_webcam_noasyn import init_camera_settings, decode_input_camera, destroy_all_cv
 from observer import Publisher, Subscriber
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import asyncio
@@ -54,7 +52,7 @@ class Model(Publisher):
 
     def load_qr_from_camera(self, name):
         self.set_process(name)
-        #self.check_camera_input()
+        self.check_camera_input()
         self.routine_load_qr_camera()
         self.delete_process()
 
@@ -84,15 +82,10 @@ class Model(Publisher):
         self.loaded_qr_data = load_qr_images_from_path(self.input_qr_img_path)
 
     def routine_load_qr_camera(self):
-        read_data = []
+        read_data = []     
         
-        data, camera = decode_input_camera(self.camera_setting)
-        camera.close()
-        read_data.append(data)
-        
-        # wenn mit webcam und oben den import aendern
-        #read_data.append(decode_input_camera(self.camera_setting))
-        print(read_data[0][0][0])
+        read_data.append(decode_input_camera(self.camera_setting))
+        print(read_data)
 
     def routine_process_qr_loaded_data(self, data):
         return decode_input(data)
@@ -165,6 +158,7 @@ class Controller(Subscriber):
         self.root.mainloop()
 
     def closeprogram(self, event):
+
         destroy_all_cv()
         self.root.destroy()
 

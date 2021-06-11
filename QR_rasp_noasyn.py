@@ -53,10 +53,12 @@ def decode_input_camera(cam):
     with PiCamera() as camera:
        # camera = PiCamera()
         if not camera._check_camera_open():
-            camera.resolution = (640, 480)
-            camera.framerate = 25
-            rawCapture = PiRGBArray(camera, size=(640, 480))
-            time.sleep(10)
+            camera.resolution = (560, 480)
+            camera.framerate = 20
+            rawCapture = PiRGBArray(camera, size=(560, 480))
+            time.sleep(2)
+        else:
+            print('camera in use')
         print('scan start')
         try:
             for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):  
@@ -83,9 +85,11 @@ def decode_input_camera(cam):
         except KeyError as e:
             camera.close()
             cv2.destroyAllWindows() 
+            return img_data, camera
         finally:
             camera.close()
             cv2.destroyAllWindows()
+            return img_data, camera
     
 
 def destroy_all_cv():
