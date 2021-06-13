@@ -58,8 +58,9 @@ def decode_input_camera(camera_settings):
             return img_data
         cv2.imshow('Testing-QR', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
+            
             break
-    camera_settings.release()
+    
     
 def destroy_all_cv():
     cv2.destroyAllWindows()

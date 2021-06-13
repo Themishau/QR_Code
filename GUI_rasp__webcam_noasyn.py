@@ -10,7 +10,7 @@ import asyncio
 # import nest_asyncio
 import threading
 import time
-
+from sql_api.SQL_API import SQL_Writer
 # nest_asyncio.apply()
 
 class Model(Publisher):
@@ -19,7 +19,8 @@ class Model(Publisher):
         # init gpu
 
         self.camera_setting = None
-
+        self.sql_writer = SQL_Writer()
+        
         self.input_qr_img_path = None
         self.output_path = None
         self.save_qr_data = None
@@ -85,7 +86,15 @@ class Model(Publisher):
         read_data = []     
         
         read_data.append(decode_input_camera(self.camera_setting))
-        print(read_data)
+        self.camera_setting.release()
+
+        qr_code = read_data[0][0][0].split('/')
+        qr_code = qr_code[3]
+        print('qr_code')
+        print(qr_code)
+        status = self.sql_writer.write_qr_code_in_database(qr_code)
+        print(status)
+        
 
     def routine_process_qr_loaded_data(self, data):
         return decode_input(data)
@@ -158,12 +167,21 @@ class Controller(Subscriber):
         self.root.mainloop()
 
     def closeprogram(self, event):
-
-        destroy_all_cv()
+        try:
+            destroy_all_cv()
+            self.model.camera_setting.release()
+            self.model.sql_writer.close_connection()
+        except:
+            print('no active camera')
         self.root.destroy()
 
     def closeprogrammenu(self):
-        destroy_all_cv()
+        try:   
+            destroy_all_cv()
+            self.model.camera_setting.release()
+            self.model.sql_writer.close_connection()
+        except:
+            print('no active camera')
         self.root.destroy()
 
     def do_tasks(self, task):

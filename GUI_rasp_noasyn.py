@@ -6,12 +6,15 @@ from QR_rasp_noasyn import make_qr_code, decode_input, load_qr_images_from_path
 from QR_rasp_noasyn import init_camera_settings, decode_input_camera, destroy_all_cv
 #from QR_webcam_noasyn import make_qr_code, decode_input, load_qr_images_from_path
 #from QR_webcam_noasyn import init_camera_settings, decode_input_camera
+import people_counter
+import people_counter_2
 from observer import Publisher, Subscriber
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import asyncio
 # import nest_asyncio
 import threading
 import time
+from sql_api.SQL_API import SQL_Writer
 
 # nest_asyncio.apply()
 
@@ -21,6 +24,7 @@ class Model(Publisher):
         # init gpu
 
         self.camera_setting = None
+        self.sql_writer = SQL_Writer()
 
         self.input_qr_img_path = None
         self.output_path = None
@@ -57,7 +61,10 @@ class Model(Publisher):
         #self.check_camera_input()
         self.routine_load_qr_camera()
         self.delete_process()
-
+        
+    def people_counter(self, name):
+        # people_counter.main()
+        people_counter_2.counter()
 
     def generate_qr(self, type):
         self.generated_qr_data = make_qr_code(self.save_qr_data, type)
@@ -92,11 +99,13 @@ class Model(Publisher):
         
         # wenn mit webcam und oben den import aendern
         #read_data.append(decode_input_camera(self.camera_setting))
-        print(read_data[0][0][0])
+        qr_code = read_data[0][0][0].split('/')
+        qr_code = qr_code[3]
+        print('qr_code')
+        self.sql_writer.write_qr_code_in_database()
 
     def routine_process_qr_loaded_data(self, data):
         return decode_input(data)
-
 
     def set_process(self, task):
         self.dispatch("data_changed", "{} started".format(task))
@@ -125,13 +134,16 @@ class Controller(Subscriber):
         self.model = Model(['data_changed', 'clear_data'])
         self.view = View(self.root, self.model, ['load_qr_from_img',
                                                  'load_qr_from_camera',
+                                                 'people_counter',
                                                  'close_button'],
                                                  'viewer')
 
         #init Observer
         self.view.register('load_qr_from_img', self)  # Achtung, sich selbst angeben und nicht self.controller
         self.view.register('load_qr_from_camera', self)
+        self.view.register('people_counter', self)
         self.view.register('close_button', self)
+        
         #init Observer
         self.model.register('data_changed', self.view) # Achtung, sich selbst angeben und nicht self.controller
         self.model.register('clear_data', self.view)
@@ -217,7 +229,8 @@ class View(Publisher, Subscriber):
 
         self.main.load_qr_from_img.bind("<Button>", self.load_qr_from_img)
         self.main.load_qr_from_camera.bind("<Button>", self.load_qr_from_camera)
-
+        self.main.people_counter.bind("<Button>", self.people_counter)
+        
         self.main.quitButton.bind("<Button>", self.closeprogram)
 
     def hide_instance_attribute(self, instance_attribute, widget_variablename):
@@ -249,6 +262,9 @@ class View(Publisher, Subscriber):
     def load_qr_from_camera(self, event):
         self.dispatch("load_qr_from_camera", "load_qr_from_camera clicked! Notify subscriber!")
 
+    def people_counter(self, event):
+        self.dispatch("people_counter", "people_counter clicked! Notify subscriber!")
+    
     def closeprogram(self, event):
         self.dispatch("close_button", "quit button clicked! Notify subscriber!")
 
@@ -303,6 +319,11 @@ class Main(tk.Frame):
         #button load_qr_from_camera
         self.load_qr_from_camera = tk.Button(self.mainFrame, text="Load QR from Camera", width=30, borderwidth=5, bg='#FBD975')
         self.load_qr_from_camera.grid(row = 7, column = 2, sticky = tk.N, pady = 0)
+
+        #button people_counter
+        self.people_counter = tk.Button(self.mainFrame, text="people_counter", width=30, borderwidth=5, bg='#FBD975')
+        self.people_counter.grid(row = 8, column = 1, sticky = tk.N, pady = 0)
+
 
         #button quit
         self.quitButton = tk.Button(self.mainFrame, text="Quit", width=30, borderwidth=5, bg='#FBD975')
