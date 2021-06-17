@@ -6,12 +6,18 @@ import random
 import pandas as pd
 from enum import Enum
 
+
+
+
 class TABLENAMES(Enum):
+    # mit TABLENAMES.QR_CODE.name -> 'QR_CODE'
+    # mit TABLENAMES.QR_CODE.value -> 'QR_code'
     QR_CODE              = 'QR_Code'
     BENEFIT              = 'Benefit'
     GESCHAEFT            = 'Geschaeft'
     GESCHAEFT_BENEFIT    = 'geschaeft_benefit'
     BI_LIGHT             = 'BI_Light'
+    qr_code_count        = 'qr_code_count'
 
 class SQL_Writer():
     def __init__(self, db_connection=None, user_name=None):
@@ -20,7 +26,7 @@ class SQL_Writer():
         self.cursor = self.db_connection.cursor()
 
     def testConnection(self):
-        sqlEngine = create_engine("mysql+pymysql://qr_scan_reader_test:1234@192.168.178.25:3310/RheinBerg_QRCode")
+        sqlEngine = create_engine("mysql+pymysql://qr_scan_reader_test:1234@localhost:3310/RheinBerg_QRCode")
         dbConnection = sqlEngine.connect()
         frame = pd.read_sql("select * from QR_Code", dbConnection)
         pd.set_option('display.expand_frame_repr', False)
@@ -32,7 +38,7 @@ class SQL_Writer():
             return False
 
     def create_connection(self):
-        sqlEngine = create_engine("mysql+pymysql://qr_scan_reader_test:1234@192.168.178.25:3310/RheinBerg_QRCode")
+        sqlEngine = create_engine("mysql+pymysql://qr_scan_reader_test:1234@localhost:3310/RheinBerg_QRCode")
         dbConnection = sqlEngine.connect()
         return dbConnection
 
@@ -126,7 +132,80 @@ class SQL_Writer():
                 print('konnte nicht speichern:')
                 print(i.RheinBergGalerieBenefit)
 
+    def find_in_tuple_by_id(self, tup, id):
+        for i in tup:
+            if i[0] == id:
+                return i[1], i[2]
 
+    def add_dummy_data_to_bi_light_singe_row(self, qr_code):
+
+        cursor = self.db_connection.cursor()
+        gesch_bene = self.get_df_select_gesch_bene()
+
+        sql = """INSERT INTO `RheinBerg_QRCode`.`BI_Light`
+                        ( `QR_Code`,
+                          `Geschaeft`,
+                          `Benefit`)
+                     VALUES
+                        (%s,
+                         %s,
+                         %s)
+                  """
+
+        try:
+            ran = random.randint(112, 222)
+            gb = gesch_bene.loc[gesch_bene['Id'] == ran]
+            cursor.execute(sql, (qr_code, str(gb.iloc[0].Geschaeft), str(gb.iloc[0].Benefit)))
+            self.db_connection.commit()
+        except pymysql.err.IntegrityError as e:
+            print('---------------')
+            print(e)
+            print('konnte nicht speichern:')
+            print(qr_code)
+            print(str(gb.iloc[0].Geschaeft))
+            print(str(gb.iloc[0].Benefit))
+            print('---------------')
+        
+
+
+    def add_dummy_data_to_bi_light(self):
+
+
+        cursor = self.db_connection.cursor()
+        qr_codes = self.get_df_select_qr_code()
+        # sql = "SELECT * FROM `geschaeft_benefit`"
+        # self.cursor.execute(sql)
+        # gesch_bene = self.cursor.fetchall()
+        gesch_bene = self.get_df_select_gesch_bene()
+        print(gesch_bene)
+
+        sql = """INSERT INTO `RheinBerg_QRCode`.`BI_Light`
+                        ( `QR_Code`,
+                          `Geschaeft`,
+                          `Benefit`)
+                     VALUES
+                        (%s,
+                         %s,
+                         %s)
+                  """
+
+
+        for i in qr_codes.itertuples():
+            try:
+                ran = random.randint(112, 222)
+                gb = gesch_bene.loc[gesch_bene['Id'] == ran]
+                cursor.execute(sql, (i.QR_Code, str(gb.iloc[0].Geschaeft), str(gb.iloc[0].Benefit)))
+                self.db_connection.commit()
+            except pymysql.err.IntegrityError as e:
+                print('---------------')
+                print(e)
+                print('konnte nicht speichern:')
+                print(i.QR_Code)
+                print(str(gb.iloc[0].Geschaeft))
+                print(str(gb.iloc[0].Benefit))
+                print('---------------')
+    
+    
     def add_dummy_data_to_qr_code(self):
         print("add")
         delimiter = '-'
@@ -159,13 +238,15 @@ class SQL_Writer():
                 print(string_new)
                 cursor.execute(sql, string_new)
                 self.db_connection.commit()
+
+                self.add_dummy_data_to_bi_light_singe_row(string_new)
+
             except pymysql.err.IntegrityError as e:
                 print(e)
                 print('konnte nicht speichern:')
                 print(string_new)
-            j += 1
-
-
+            j += 1    
+    
     def select_benefits(self):
         sql = "SELECT * FROM `Benefit`"
         self.cursor.execute(sql)
@@ -184,7 +265,7 @@ class SQL_Writer():
         self.cursor.execute(sql)
         print('Result: ')
         print(pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "Geschaeft", "Benefit", "Timestamp"]))
-
+        
     def select_bi_light(self):
         sql = "SELECT * FROM `BI_Light`"
         self.cursor.execute(sql)
@@ -264,6 +345,7 @@ class SQL_Writer():
             print(df)
         
         return isempty
+
 
     def create_connection_pymysql(self):
         connection = pymysql.connect(host='192.168.178.25',    # change host-ip if needed

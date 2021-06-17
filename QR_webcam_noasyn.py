@@ -14,7 +14,7 @@ from IPython.display import display
 CAMERA_PORT = 1
 
 def init_camera_settings(settings):
-    cam_settings =  cv2.VideoCapture(1)
+    cam_settings =  cv2.VideoCapture(0)
     #cam_settings =  cv2.VideoCapture(src=0, cv2.CAP_DSHOW)
     cam_settings.set(3, 640)
     cam_settings.set(4, 480)
