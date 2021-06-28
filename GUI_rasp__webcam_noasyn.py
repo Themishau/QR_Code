@@ -16,7 +16,6 @@ from sql_api.SQL_API import SQL_Writer
 class Model(Publisher):
     def __init__(self, events):
         super().__init__(events)
-        # init gpu
 
         self.camera_setting = None
         self.sql_writer = SQL_Writer()
@@ -92,7 +91,7 @@ class Model(Publisher):
         qr_code = qr_code[3]
         print('qr_code')
         print(qr_code)
-        status = self.sql_writer.write_qr_code_in_database(qr_code)
+        status = self.sql_writer.write_dummy_qr_code_in_database(qr_code)
         print(status)
         
 

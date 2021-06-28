@@ -13,18 +13,22 @@ from IPython import get_ipython
 from IPython.display import display
 CAMERA_PORT = 1
 
+
 async def init_camera_settings(settings):
 
-    cam_settings =  cv2.VideoCapture(CAMERA_PORT, cv2.CAP_DSHOW)
+    cam_settings = cv2.VideoCapture(CAMERA_PORT, cv2.CAP_DSHOW)
     cam_settings.set(3, 640)
     cam_settings.set(4, 480)
     return cam_settings
 
+
 async def make_qr_code(data, type):
     return qrcode.make(data)
 
+
 async def save_qr_as_jpg(data, output_name):
     data.save(output_name)
+
 
 async def load_qr_images_from_path(data_path):
     data = []
@@ -38,6 +42,7 @@ async def load_qr_images_from_path(data_path):
             pass
     print(data)
     return data
+
 
 async def decode_input(img):
     img_data = []

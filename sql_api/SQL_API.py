@@ -5,6 +5,9 @@ import cryptography
 import random
 import pandas as pd
 from enum import Enum
+import time
+import random
+import datetime as dt
 
 class TABLENAMES(Enum):
     # mit TABLENAMES.QR_CODE.name -> 'QR_CODE'
@@ -33,6 +36,11 @@ class SQL_Writer():
             return True
         else:
             return False
+
+    def reconnect_to_Database(self):
+        self.close_connection()
+        self.db_connection = self.create_connection_pymysql()
+        self.cursor = self.db_connection.cursor()
 
     def create_connection(self):
         sqlEngine = create_engine("mysql+pymysql://qr_scan_reader_test:1234@localhost:3310/RheinBerg_QRCode")
@@ -81,7 +89,6 @@ class SQL_Writer():
                 self.cursor.execute(sql, (i[1], result_bene[j][1]))
 
         self.db_connection.commit()
-        self.close_connection()
 
     def add_dummy_data_to_geschaeft(self):
 
@@ -106,8 +113,6 @@ class SQL_Writer():
         for i in result:
             print(i)
 
-        self.close_connection()
-
     def add_dummy_data_to_benefits(self):
         df = pd.read_csv('some_data/testdata2.csv', names=['RheinBergGalerieBenefit'], delimiter=';')
         # print(df['RheinBergGalerieGeschaeft'])
@@ -126,12 +131,41 @@ class SQL_Writer():
                 print(e)
                 print('konnte nicht speichern:')
                 print(i.RheinBergGalerieBenefit)
-        self.close_connection()
 
     def find_in_tuple_by_id(self, tup, id):
         for i in tup:
             if i[0] == id:
                 return i[1], i[2]
+
+
+    def add_data_to_bi_light_single_row(self, qr_code, geschaeft, benefit):
+
+        cursor = self.db_connection.cursor()
+        gesch_bene = self.get_df_select_gesch_bene()
+
+        sql = """INSERT INTO `RheinBerg_QRCode`.`BI_Light`
+                        ( `QR_Code`,
+                          `Geschaeft`,
+                          `Benefit`)
+                     VALUES
+                        (%s,
+                         %s,
+                         %s)
+                  """
+
+        try:
+            gb = gesch_bene.loc[gesch_bene['Geschaeft'] == geschaeft, gesch_bene['Benefit'] == benefit]
+            cursor.execute(sql, (qr_code, str(gb.iloc[0].Geschaeft), str(gb.iloc[0].Benefit)))
+            self.db_connection.commit()
+        except pymysql.err.IntegrityError as e:
+            print('---------------')
+            print(e)
+            print('konnte nicht speichern:')
+            print(qr_code)
+            print(str(gb.iloc[0].Geschaeft))
+            print(str(gb.iloc[0].Benefit))
+            print('---------------')
+
 
     def add_dummy_data_to_bi_light_singe_row(self, qr_code):
 
@@ -162,7 +196,6 @@ class SQL_Writer():
             print(str(gb.iloc[0].Benefit))
             print('---------------')
 
-        self.close_connection()
 
     def add_dummy_data_to_bi_light(self):
         cursor = self.db_connection.cursor()
@@ -197,7 +230,7 @@ class SQL_Writer():
                 print(str(gb.iloc[0].Geschaeft))
                 print(str(gb.iloc[0].Benefit))
                 print('---------------')
-        self.close_connection()
+
 
     def add_dummy_data_to_qr_code(self):
         print("add")
@@ -228,7 +261,6 @@ class SQL_Writer():
                               string[3] + delimiter + \
                               string[4]
 
-                print(string_new)
                 cursor.execute(sql, string_new)
                 self.db_connection.commit()
 
@@ -239,7 +271,7 @@ class SQL_Writer():
                 print('konnte nicht speichern:')
                 print(string_new)
             j += 1
-        self.close_connection()
+
 
     def select_benefits(self):
         sql = "SELECT * FROM `Benefit`"
@@ -247,79 +279,109 @@ class SQL_Writer():
         result = self.cursor.fetchall()
         print('Result: ')
         print(pd.DataFrame(list(result), columns=["Id", "Benefit", "Timestamp"]))
-        self.close_connection()
+
 
     def select_geschaefte(self):
         sql = "SELECT * FROM `Geschaeft`"
         self.cursor.execute(sql)
         print('Result: ')
         print(pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "Geschaeft", "Timestamp"]))
-        self.close_connection()
+
 
     def select_gesch_bene(self):
         sql = "SELECT * FROM `geschaeft_benefit`"
         self.cursor.execute(sql)
         print('Result: ')
         print(pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "Geschaeft", "Benefit", "Timestamp"]))
-        self.close_connection()
+
 
     def select_bi_light(self):
         sql = "SELECT * FROM `BI_Light`"
         self.cursor.execute(sql)
         print('Result: ')
         print(pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "Geschaeft", "Benefit", "Timestamp"]))
-        self.close_connection()
+
 
     def select_qr_code(self):
         sql = "SELECT * FROM `QR_Code`"
         self.cursor.execute(sql)
         print('Result: ')
         print(pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "QR_Code", "Timestamp"]))
-        self.close_connection()
+
 
     def select_qr_code_count(self):
         sql = "SELECT * FROM `qr_code_count`"
         self.cursor.execute(sql)
         print('Result: ')
         print(pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "qr_code_count", "Timestamp"]))
-        self.close_connection()
+
 
     # # # # returns a dataframe, full # # # #
     def get_df_select_benefits(self):
         sql = "SELECT * FROM `Benefit`"
         self.cursor.execute(sql)
-        self.close_connection()
+
         return pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "Benefit", "Timestamp"])
 
     def get_df_select_geschaefte(self):
         sql = "SELECT * FROM `Geschaeft`"
         self.cursor.execute(sql)
-        self.close_connection()
+
         return pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "Geschaeft", "Timestamp"])
 
     def get_df_select_gesch_bene(self):
         sql = "SELECT * FROM `geschaeft_benefit`"
         self.cursor.execute(sql)
-        self.close_connection()
+
         return pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "Geschaeft", "Benefit", "Timestamp"])
 
     def get_df_select_bi_light(self):
         sql = "SELECT * FROM `BI_Light`"
         self.cursor.execute(sql)
-        self.close_connection()
-        return pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "Geschaeft", "Benefit", "Timestamp"])
+
+        return pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "QR_Code", "Geschaeft", "Benefit", "Timestamp"])
 
     def get_df_select_qr_code(self):
         sql = "SELECT * FROM `QR_Code`"
         self.cursor.execute(sql)
-        self.close_connection()
+
         return pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "QR_Code", "Timestamp"])
 
     def get_df_select_qr_code_count(self):
         sql = "SELECT * FROM `qr_code_count`"
         self.cursor.execute(sql)
-        self.close_connection()
+
         return pd.DataFrame(list(self.cursor.fetchall()), columns=["Id", "qr_code_count", "Timestamp"])
+
+    def get_geschaeft(self, where_clausel):
+        print("checking: " + 'geschaeft_benefit')
+
+        sql = """SELECT * FROM `geschaeft_benefit`
+                 WHERE Geschaeft = %s
+              """
+
+        self.cursor.execute(sql, where_clausel)
+        result = self.cursor.fetchall()
+        df = pd.DataFrame(list(result), columns=["Id", "Geschaeft", "Benefit", "Timestamp"])
+        if not df.empty:
+            return df
+        return None
+
+    def get_geschaeft_benefit(self, where_geschaeft, where_benefit):
+        print("checking: " + 'geschaeft_benefit')
+
+        sql = """SELECT * FROM `geschaeft_benefit`
+                 WHERE Geschaeft = %s
+                   AND Benefit   = %s
+              """
+
+        self.cursor.execute(sql, where_geschaeft, where_benefit)
+        result = self.cursor.fetchall()
+        df = pd.DataFrame(list(result), columns=["Id", "Geschaeft", "Benefit", "Timestamp"])
+        if not df.empty:
+            return df
+        return None
+
 
     # wenn duplicate, dann wird false returnt
     def write_qr_code_count_in_database(self, qr_code_count):
@@ -335,18 +397,18 @@ class SQL_Writer():
             cursor.execute(sql, qr_code_count)
 
             self.db_connection.commit()
-            self.close_connection()
+
             return True
 
         except pymysql.err.IntegrityError as e:
             print(e)
             print('konnte nicht speichern:')
             print(qr_code_count)
-            self.close_connection()
+
             return False
 
     # wenn duplicate, dann wird false returnt
-    def write_qr_code_in_database(self, qr_code):
+    def write_dummy_qr_code_in_database(self, qr_code):
         # format: 'https://ergebnis.lola-coronapass.de/372e7c02-9c3a-4082-971d-6e0578ddea81'
 
         no_duplicate = self.check_if_not_duplicate_qrcode(qr_code)
@@ -368,9 +430,34 @@ class SQL_Writer():
                 print('konnte nicht speichern:')
                 print(qr_code)
         else:
-            self.close_connection()
             return False
-        self.close_connection()
+        return True
+
+    # wenn duplicate, dann wird false returnt
+    def write_qr_code_in_database(self, qr_code, geschaeft_benefit_df):
+        # format: 'https://ergebnis.lola-coronapass.de/372e7c02-9c3a-4082-971d-6e0578ddea81'
+        print(geschaeft_benefit_df)
+
+        no_duplicate = self.check_if_not_duplicate_qrcode(qr_code)
+        if no_duplicate:
+            try:
+                sql = """INSERT INTO `RheinBerg_QRCode`.`QR_Code`
+                                (`QR_Code`)
+                             VALUES
+                                (%s)
+                          """
+                cursor = self.db_connection.cursor()
+                cursor.execute(sql, qr_code)
+                self.add_data_to_bi_light_single_row(qr_code, geschaeft_benefit_df['Geschaeft'].iloc[0], geschaeft_benefit_df['Benefit'].iloc[0])
+                self.db_connection.commit()
+
+
+            except pymysql.err.IntegrityError as e:
+                print(e)
+                print('konnte nicht speichern:')
+                print(qr_code)
+        else:
+            return False
         return True
 
     def check_if_not_duplicate_qrcode(self, where_clausel):
@@ -385,8 +472,44 @@ class SQL_Writer():
         if not df.empty:
             print('Result: ')
             print(df)
-        self.close_connection()
+
         return isempty
+
+    def generate_qr_every_hour(self):
+        delimiter = '-'
+        while True:
+            qr_codes = []
+            with open('some_data/testdata3.txt', 'r') as qr_c:
+                for line in qr_c:
+                    split_line = line.split(delimiter)
+                    split_line[0] = str(random.randint(10000000, 99999999))
+                    string_new = split_line[0] + delimiter + \
+                                 split_line[1] + delimiter + \
+                                 split_line[2] + delimiter + \
+                                 split_line[3] + delimiter + \
+                                 split_line[4]
+                    qr_codes.append(str(string_new))
+                    break
+
+            write_qr_code = []
+            with open('some_data/testdata3.txt', 'w') as qr_c:
+                for line in range(random.randint(1, 100)):
+                    split_line = qr_codes[0].split(delimiter)
+                    split_line[0] = str(random.randint(10000000, 99999999))
+                    string_new = split_line[0] + delimiter + \
+                                 split_line[1] + delimiter + \
+                                 split_line[2] + delimiter + \
+                                 split_line[3] + delimiter + \
+                                 split_line[4]
+                    write_qr_code.append(string_new)
+                qr_c.writelines(write_qr_code)
+
+            self.add_dummy_data_to_qr_code()
+            now = dt.datetime.now()
+            next_generate_time = random.randint(120, 3600)
+            print(now)
+            print('generated: {} qr_codes \n next is in: {} seconds'.format(len(write_qr_code), next_generate_time))
+            time.sleep(next_generate_time)
 
 
     def create_connection_pymysql(self):
@@ -395,10 +518,15 @@ class SQL_Writer():
                                      user='dummy_insert',
                                      password='1234',
                                      db='RheinBerg_QRCode')
+
+        # connection = pymysql.connect(host='192.168.137.238',    # change host-ip if needed
+        #                              port=3310,           # change port if needed
+        #                              user='dummy_insert',
+        #                              password='1234',
+        #                              db='RheinBerg_QRCode')
         print('success')
-        self.close_connection()
         return connection
 
     def close_connection(self):
-        # self.db_connection.close()
-        print()
+        self.db_connection.close()
+

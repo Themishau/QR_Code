@@ -102,7 +102,7 @@ class Model(Publisher):
         qr_code = read_data[0][0][0].split('/')
         qr_code = qr_code[3]
         print('qr_code')
-        print(self.sql_writer.write_qr_code_in_database(qr_code))
+        print(self.sql_writer.write_dummy_qr_code_in_database(qr_code))
 
     def routine_process_qr_loaded_data(self, data):
         return decode_input(data)

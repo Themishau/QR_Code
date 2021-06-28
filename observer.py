@@ -12,6 +12,7 @@ class Subscriber:
         print('{} got message "{}"'.format(self.name, message))
 
 
+
 class Publisher:
     def __init__(self, events):
         # maps event names to subscribers

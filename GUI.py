@@ -29,7 +29,6 @@ class Model(Publisher):
         self.filepath = None
         self.processing = None
 
-
     def clearData(self):
         self.input_qr_img_path = None
         self.output_path = None
@@ -114,12 +113,15 @@ class Controller(Subscriber):
         #init model and viewer with publisher
         self.model = Model(['data_changed', 'clear_data'])
         self.view = View(self.root, self.model, ['load_qr_from_img',
-                                                 'load_qr_from_camera'],
+                                                 'load_qr_from_camera',
+                                                 'close_button'],
                                                  'viewer')
+
 
         #init Observer
         self.view.register('load_qr_from_img', self)  # Achtung, sich selbst angeben und nicht self.controller
         self.view.register('load_qr_from_camera', self)
+        self.view.register('close_button', self)
 
         #init Observer
         self.model.register('data_changed', self.view) # Achtung, sich selbst angeben und nicht self.controller
@@ -140,7 +142,7 @@ class Controller(Subscriber):
                 return
 
         if event == 'close_button':
-            self.closeprogram(event)
+           return self.closeprogram(event)
 
         self.do_tasks(event)
 
@@ -161,16 +163,19 @@ class Controller(Subscriber):
 
     def do_tasks(self, task):
         """ Function/Button starting the asyncio part. """
-        return threading.Thread(target= self.async_do_task(task), args=()).start()
+        return threading.Thread(target=self.async_do_task(task), args=(1,)).start()
+        # return self.async_do_task(task)
 
     def async_do_task(self, task):
         loop = asyncio.new_event_loop()
         self.runningAsync = self.runningAsync + 1
         visit_task = getattr(self.model, task, self.generic_task)
+        # visit_task = getattr(self.model, task)
+        # return visit_task(task)
         loop.run_until_complete(visit_task(task))
         while self.model.processing is not None:
-            time.sleep(1)
-            print('status: {} please wait...'.format(self.model.processing))
+             time.sleep(1)
+             print('status: {} please wait...'.format(self.model.processing))
         loop.close()
         self.runningAsync = self.runningAsync - 1
 
@@ -204,7 +209,7 @@ class View(Publisher, Subscriber):
         self.main.load_qr_from_img.bind("<Button>", self.load_qr_from_img)
         self.main.load_qr_from_camera.bind("<Button>", self.load_qr_from_camera)
 
-        self.main.quitButton.bind("<Button>", self.closeprogram)
+        self.main.quitButton.bind("<Button>", self.close_button)
 
     def hide_instance_attribute(self, instance_attribute, widget_variablename):
         print(instance_attribute)
@@ -235,7 +240,7 @@ class View(Publisher, Subscriber):
     def load_qr_from_camera(self, event):
         self.dispatch("load_qr_from_camera", "load_qr_from_camera clicked! Notify subscriber!")
 
-    def closeprogram(self, event):
+    def close_button(self, event):
         self.dispatch("close_button", "quit button clicked! Notify subscriber!")
 
     def closeprogrammenu(self):
